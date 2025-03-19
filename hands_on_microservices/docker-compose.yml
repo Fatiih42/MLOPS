@@ -1,17 +1,59 @@
+version: '3.8'
+
 services:
+  database:
+    image: postgres:15
+    container_name: database
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydatabase
+      POSTGRES_HOST_AUTH_METHOD: trust  # Permet d'éviter les erreurs d'authentification
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydatabase"]
+      interval: 5s
+      retries: 5
+      start_period: 10s
+
   service_b:
+    container_name: service_b
     build:
       context: ./service_b
+    depends_on:
+      database:
+        condition: service_healthy  # Attendre que la DB soit prête
+    environment:
+      DATABASE_URL: postgresql+asyncpg://user:password@database:5432/mydatabase
     volumes:
-      - /tmp:/tmp  # Share /tmp for the Unix Domain Socket
-    restart: always
+      - /tmp:/tmp
+      - ../data:/mnt/data
+    networks:
+      - backend
+    restart: no
+    entrypoint: ["/bin/sh", "-c", "sleep 5 && uvicorn main:app --host 0.0.0.0 --port 8000"]
+
   service_a:
+    container_name: service_a
     build:
       context: ./service_a
-    volumes:
-      - /tmp:/tmp  # Share /tmp for the Unix Domain Socket
-    ports:
-      - "8000:8000"  # Expose service_a's port to access it from outside
     depends_on:
-      - service_b
+      service_b:
+        condition: service_started
+    volumes:
+      - /tmp:/tmp
+    ports:
+      - "8000:8000"
+    networks:
+      - backend
     restart: always
+
+networks:
+  backend:
+
+volumes:
+  pgdata:
