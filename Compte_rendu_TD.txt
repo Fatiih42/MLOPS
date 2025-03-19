@@ -1,0 +1,55 @@
+Compte rendu TD : 
+
+PARTIE I) : 
+
+1)
+
+Pour gérer la communication entre mes microservices avec Docker Compose en utilisant des Unix Domain Sockets (UDS), j'ai mis en place deux services distincts avec FastAPI : un service A qui agit comme client et un service B qui expose une API accessible via un socket Unix. Plutôt que d'utiliser une communication réseau classique sur HTTP, j'ai configuré Service B pour écouter sur un socket Unix local (/tmp/service_b.sock) grâce à Uvicorn, tandis que Service A utilise httpx.AsyncHTTPTransport(uds=uds_path) pour envoyer ses requêtes via ce socket. Pour que les deux services puissent échanger, j'ai utilisé Docker Compose en définissant un volume partagé sur /tmp, garantissant ainsi que le socket est accessible depuis les deux conteneurs. J'ai également rencontré un problème lié au nom du conteneur Service B qui prenait un suffixe -1, ce qui empêchait Service A de le reconnaître correctement. J'ai résolu ce problème en définissant un container_name explicite dans le fichier docker-compose.yml. Après avoir démarré les services avec docker-compose up --build, j'ai vérifié que le socket était bien créé dans /tmp du conteneur Service B et j'ai utilisé curl pour tester la communication entre les services. En recevant la réponse attendue de Service B, j'ai confirmé que la communication inter-microservices via Unix Domain Sockets fonctionnait correctement, offrant ainsi un moyen plus performant et sécurisé de faire transiter les requêtes sans exposer les services sur le réseau.
+
+2) 
+
+Ajout d’une base de données dans l’écosystème
+Pour intégrer une base de données à l’architecture existante, j’ai commencé par déployer PostgreSQL à l’aide de Docker Compose. J’ai défini un service database, en configurant les variables d’environnement nécessaires (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB) pour gérer l’authentification et en ajoutant un volume pour la persistance des données.
+
+Ensuite, j’ai modifié service_b afin de permettre une connexion avec PostgreSQL. Pour cela, j’ai utilisé SQLAlchemy et asyncpg, et j’ai créé un fichier db.py centralisant la configuration du moteur de base de données, la gestion des sessions asynchrones et la base déclarative.
+
+Après cette configuration initiale, j’ai structuré models.py pour définir la table TextData, correspondant aux données que l’API devait manipuler. J’ai ensuite mis en place un script db_init.py, permettant d’initialiser automatiquement les tables au démarrage du service.
+
+Une fois ces éléments en place, j’ai validé la connexion en accédant directement au conteneur PostgreSQL et en exécutant des requêtes pour vérifier l’intégrité de la base. J’ai également développé un script insert_data.py capable de lire un fichier CSV et d’insérer ses données dans la base, garantissant ainsi un premier jeu de données exploitable.
+
+Durant cette mise en place, j’ai rencontré et résolu plusieurs problèmes, notamment des erreurs liées aux dépendances, aux montages de volumes et à la résolution DNS entre les conteneurs. Après avoir corrigé ces points, j’ai validé l’insertion des données en exécutant des requêtes SQL directement dans PostgreSQL.
+
+Enfin, pour rendre ces données accessibles depuis l’API, j’ai ajouté un endpoint /texts dans FastAPI, permettant de récupérer les informations stockées dans la base. Après un redémarrage propre des conteneurs et des tests sur l’API, j’ai confirmé que la communication entre les microservices et la base de données était fluide et opérationnelle.
+
+3) 
+
+Introduction des GitHub Actions (.github/workflows/ci_cd.yml)
+Pour automatiser l’intégration et le déploiement continu (CI/CD) de mon projet, j’ai mis en place GitHub Actions en créant un fichier de workflow :
+.github/workflows/ci_cd.yml.
+
+Ce fichier définit un pipeline CI/CD qui s’exécute à chaque push ou pull request sur les branches main et develop. Le workflow comprend plusieurs étapes :
+
+Récupération du code (checkout) depuis le dépôt GitHub.
+Installation de Python et des dépendances listées dans requirements.txt.
+Exécution des tests avec pytest pour valider le bon fonctionnement de l’application.
+Construction et push de l’image Docker vers Docker Hub.
+Une fois le fichier ci_cd.yml ajouté, j’ai poussé le code et observé l’exécution du pipeline via l’onglet Actions de GitHub. Cependant, l’exécution a échoué sur l’étape "Install dependencies", avec une erreur indiquant que le fichier service_b/requirements.txt est introuvable.
+
+Pour tenter de résoudre ce problème :
+
+J’ai vérifié que requirements.txt était bien présent dans service_b/.
+J’ai ajouté et poussé requirements.txt dans le dépôt GitHub (git add, git commit, git push).
+J’ai modifié le workflow pour afficher la liste des fichiers (ls -R) afin de voir si le fichier était bien récupéré par GitHub Actions.
+J’ai essayé de corriger le chemin dans .github/workflows/ci_cd.yml et relancé plusieurs fois le pipeline.
+Malgré ces tentatives, le fichier requirements.txt n’est toujours pas détecté par GitHub Actions, ce qui empêche l’installation des dépendances et bloque la suite du pipeline. Pour le moment, je me suis arrêté sur cette erreur et je vais poursuivre le débogage afin d’assurer une exécution complète du workflow.
+
+
+4)
+
+Pour l’instant, l’ajout de Nginx n’est pas nécessaire dans l’architecture du projet. FastAPI, exécuté avec Uvicorn, gère déjà les requêtes efficacement sans avoir besoin d’un reverse proxy.
+
+L’utilisation de Nginx pourrait être pertinente dans un contexte de fort trafic, de load balancing ou pour gérer le HTTPS, mais dans l’état actuel du projet, où un seul microservice est exposé, il n’apporterait pas de valeur ajoutée immédiate.
+
+
+5) Si je choisis de ne pas migrer de Docker Compose vers Kubernetes, c'est parce que Docker Compose répond déjà pleinement à mes besoins et que la migration ajouterait une complexité inutile sans réel gain à ce stade du projet.
+
